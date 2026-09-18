@@ -31,33 +31,58 @@ jobs:
 
       # As chaves vêm dos Secrets do repositório, nunca do código-fonte.
       # Configure em: Settings → Secrets and variables → Actions.
-      - name: Gerar env.json a partir dos secrets
+      - name: Preparar configuração
+        id: cfg
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
-            echo "::error::Faltam os secrets SUPABASE_URL e/ou SUPABASE_ANON_KEY."
-            exit 1
+          if [ -n "$SUPABASE_URL" ] && [ -n "$SUPABASE_ANON_KEY" ]; then
+            jq -n \
+              --arg url "$SUPABASE_URL" \
+              --arg anon "$SUPABASE_ANON_KEY" \
+              --arg gemini "$GEMINI_API_KEY" \
+              '{SUPABASE_URL:$url, SUPABASE_ANON_KEY:$anon, GEMINI_API_KEY:$gemini, GEMINI_MODEL:"gemini-flash-latest"}' \
+              > env.json
+            echo "configurado=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Secrets SUPABASE_URL/SUPABASE_ANON_KEY ausentes. Vou apenas verificar se o projeto compila, sem gerar APK utilizável."
+            cp env.example.json env.json
+            echo "configurado=false" >> "$GITHUB_OUTPUT"
           fi
-          jq -n \
-            --arg url "$SUPABASE_URL" \
-            --arg anon "$SUPABASE_ANON_KEY" \
-            --arg gemini "$GEMINI_API_KEY" \
-            '{SUPABASE_URL:$url, SUPABASE_ANON_KEY:$anon, GEMINI_API_KEY:$gemini, GEMINI_MODEL:"gemini-flash-latest"}' \
-            > env.json
 
       - name: Build APK release
+        if: steps.cfg.outputs.configurado == 'true'
         run: flutter build apk --release --dart-define-from-file=env.json
+
+      # Sem secrets não dá para gerar um APK que funcione, mas ainda vale
+      # provar que o lado Android (Gradle, desugaring, plugins) compila.
+      - name: Verificar compilação Android (sem secrets)
+        if: steps.cfg.outputs.configurado != 'true'
+        run: flutter build apk --debug --dart-define-from-file=env.json
 
       - name: Remover env.json
         if: always()
         run: rm -f env.json
 
       - uses: actions/upload-artifact@v4
+        if: steps.cfg.outputs.configurado == 'true'
         with:
           name: estoque-casa-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 30
+
+      - name: Aviso final
+        if: steps.cfg.outputs.configurado != 'true'
+        run: |
+          echo "### ⚠️ APK não gerado" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "O projeto compila, mas faltam os secrets do repositório." >> "$GITHUB_STEP_SUMMARY"
+          echo "Cadastre em **Settings → Secrets and variables → Actions**:" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`SUPABASE_URL\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`SUPABASE_ANON_KEY\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`GEMINI_API_KEY\` (opcional, só para ler nota fiscal)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Depois rode o workflow de novo em **Actions → Build APK → Run workflow**." >> "$GITHUB_STEP_SUMMARY"
