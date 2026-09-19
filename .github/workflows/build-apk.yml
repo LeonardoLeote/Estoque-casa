@@ -71,6 +71,21 @@ jobs:
           keyAlias=estoquecasa
           keyPassword=$KEYSTORE_PASSWORD
           EOF
+            # Falhar aqui, com mensagem clara, é melhor do que deixar o
+            # Gradle quebrar depois com um stack trace de 80 linhas.
+            if [ ! -s android/estoque-casa.jks ]; then
+              echo "::error::ANDROID_KEYSTORE_BASE64 não decodificou para um arquivo válido."
+              exit 1
+            fi
+            if ! keytool -list -keystore android/estoque-casa.jks \
+                 -storepass "$KEYSTORE_PASSWORD" -alias estoquecasa >/dev/null 2>&1; then
+              echo "::error::Não consegui abrir o keystore. Confira ANDROID_KEYSTORE_PASSWORD e se o alias é 'estoquecasa'."
+              exit 1
+            fi
+            echo "Keystore validado. Impressão digital:"
+            keytool -list -keystore android/estoque-casa.jks \
+              -storepass "$KEYSTORE_PASSWORD" -alias estoquecasa \
+              | grep -i "SHA-256" || true
             echo "assinado=proprio" >> "$GITHUB_OUTPUT"
           else
             echo "::warning::Sem ANDROID_KEYSTORE_BASE64: o APK sai com chave de debug e NÃO instala por cima da versão anterior."

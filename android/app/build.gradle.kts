@@ -1,3 +1,4 @@
+import java.io.File
 import java.util.Properties
 
 plugins {
@@ -37,7 +38,13 @@ android {
     signingConfigs {
         if (temChavePropria) {
             create("release") {
-                storeFile = file(propsAssinatura.getProperty("storeFile"))
+                // `file()` neste script resolve a partir de android/app/, mas
+                // o key.properties vive em android/. Resolver pelo rootProject
+                // mantém os dois no mesmo lugar; caminho absoluto passa direto.
+                storeFile = propsAssinatura.getProperty("storeFile").let { caminho ->
+                    val f = File(caminho)
+                    if (f.isAbsolute) f else rootProject.file(caminho)
+                }
                 storePassword = propsAssinatura.getProperty("storePassword")
                 keyAlias = propsAssinatura.getProperty("keyAlias")
                 keyPassword = propsAssinatura.getProperty("keyPassword")
