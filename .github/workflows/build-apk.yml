@@ -45,7 +45,8 @@ jobs:
               --arg url "$SUPABASE_URL" \
               --arg anon "$SUPABASE_ANON_KEY" \
               --arg gemini "$GEMINI_API_KEY" \
-              '{SUPABASE_URL:$url, SUPABASE_ANON_KEY:$anon, GEMINI_API_KEY:$gemini, GEMINI_MODEL:"gemini-flash-latest"}' \
+              --arg commit "${GITHUB_SHA:0:7}" \
+              '{SUPABASE_URL:$url, SUPABASE_ANON_KEY:$anon, GEMINI_API_KEY:$gemini, GEMINI_MODEL:"gemini-flash-latest", APP_BUILD_COMMIT:$commit}' \
               > env.json
             echo "configurado=true" >> "$GITHUB_OUTPUT"
           else

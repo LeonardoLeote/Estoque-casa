@@ -36,6 +36,20 @@ class _ListaComprasScreenState extends State<ListaComprasScreen> {
     return mapa;
   }
 
+  /// Estimativa de gasto: preço unitário × quantidade que falta para
+  /// chegar ao mínimo (no mínimo 1). Só conta itens com preço conhecido.
+  double get _estimativa => _comprar.where((i) => i.preco != null).fold(
+        0.0,
+        (soma, i) => soma + i.preco! * _quantoComprar(i),
+      );
+
+  bool get _algumSemPreco => _comprar.any((i) => i.preco == null);
+
+  static double _quantoComprar(ItemModel i) {
+    final falta = i.minimo - i.quantidade;
+    return falta > 1 ? falta : 1;
+  }
+
   String _montarTexto() {
     final buffer = StringBuffer('🛒 *Lista de compras*\n');
     _porCategoria.forEach((categoria, itens) {
@@ -45,9 +59,18 @@ class _ListaComprasScreenState extends State<ListaComprasScreen> {
         final falta = i.status == ItemStatus.vazio
             ? 'acabou'
             : 'restam ${i.quantidadeFormatada}';
-        buffer.writeln('$marca ${i.nome} — $falta');
+        final preco = i.preco == null
+            ? ''
+            : ' (~${ItemModel.formatarDinheiro(i.preco! * _quantoComprar(i))})';
+        buffer.writeln('$marca ${i.nome} — $falta$preco');
       }
     });
+    if (_estimativa > 0) {
+      buffer.writeln(
+        '\n💰 Estimativa${_algumSemPreco ? " parcial" : ""}: '
+        '${ItemModel.formatarDinheiro(_estimativa)}',
+      );
+    }
     buffer.writeln('\n_Enviado pelo Estoque Casa_');
     return buffer.toString();
   }
@@ -96,7 +119,8 @@ class _ListaComprasScreenState extends State<ListaComprasScreen> {
               children: [
                 Text(
                   '${_comprar.length} ${_comprar.length == 1 ? "item" : "itens"} '
-                  'para repor · ${_marcados.length} marcado(s)',
+                  'para repor · ${_marcados.length} marcado(s)'
+                  '${_estimativa > 0 ? " · ~${ItemModel.formatarDinheiro(_estimativa)}" : ""}',
                   style: TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w700,

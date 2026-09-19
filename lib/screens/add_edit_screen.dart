@@ -23,6 +23,7 @@ class _AddEditScreenState extends State<AddEditScreen> {
   late final TextEditingController _nome;
   late final TextEditingController _quantidade;
   late final TextEditingController _minimo;
+  late final TextEditingController _preco;
 
   late String _categoria;
   late String _unidade;
@@ -40,6 +41,11 @@ class _AddEditScreenState extends State<AddEditScreen> {
     _minimo = TextEditingController(
       text: item == null ? '' : ItemModel.formatarNumero(item.minimo),
     );
+    _preco = TextEditingController(
+      text: item?.preco == null
+          ? ''
+          : item!.preco!.toStringAsFixed(2).replaceAll('.', ','),
+    );
     _categoria = item?.categoria ?? AppConstants.categorias.first;
     _unidade = item?.unidade ?? 'un';
     _emoji = item?.emoji ?? AppConstants.emojisDaCategoria(_categoria).first;
@@ -50,11 +56,20 @@ class _AddEditScreenState extends State<AddEditScreen> {
     _nome.dispose();
     _quantidade.dispose();
     _minimo.dispose();
+    _preco.dispose();
     super.dispose();
   }
 
   double _lerNumero(TextEditingController c) =>
       double.tryParse(c.text.trim().replaceAll(',', '.')) ?? 0;
+
+  /// Campo vazio significa "sem preço informado", não "custa zero".
+  double? _lerPrecoOpcional() {
+    final texto = _preco.text.trim();
+    if (texto.isEmpty) return null;
+    final v = double.tryParse(texto.replaceAll(',', '.'));
+    return (v == null || v <= 0) ? null : v;
+  }
 
   Future<void> _salvar() async {
     if (!_formKey.currentState!.validate()) return;
@@ -70,6 +85,7 @@ class _AddEditScreenState extends State<AddEditScreen> {
       unidade: _unidade,
       minimo: _lerNumero(_minimo),
       emoji: _emoji,
+      preco: _lerPrecoOpcional(),
       createdAt: base?.createdAt ?? agora,
       updatedAt: agora,
     );
@@ -298,6 +314,44 @@ class _AddEditScreenState extends State<AddEditScreen> {
               ],
             ),
             const SizedBox(height: 6),
+            const SizedBox(height: 20),
+
+            _Rotulo('Preço unitário (opcional)'),
+            TextFormField(
+              controller: _preco,
+              enabled: !_salvando,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+              ],
+              decoration: _campo('Ex: 24,90').copyWith(
+                prefixText: 'R\$ ',
+                prefixStyle: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: Colors.black87,
+                ),
+              ),
+              validator: (v) {
+                final texto = (v ?? '').trim();
+                if (texto.isEmpty) return null;
+                final n = double.tryParse(texto.replaceAll(',', '.'));
+                if (n == null) return 'Número inválido';
+                if (n < 0) return 'Não pode ser negativo';
+                return null;
+              },
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Usado para estimar o custo da lista de compras. Deixe vazio se não souber.',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.black.withValues(alpha: 0.5),
+              ),
+            ),
+            const SizedBox(height: 14),
+
             Text(
               'Deixe o alerta em 0 para não receber aviso de estoque baixo deste item.',
               style: TextStyle(

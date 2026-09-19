@@ -6,12 +6,17 @@ import 'package:http/http.dart' as http;
 import '../constants.dart';
 
 /// Produto identificado pelo Gemini numa foto de nota fiscal.
+/// Campos mutáveis: a tela de revisão deixa o usuário corrigir o que o
+/// Gemini leu errado antes de importar.
 class ProdutoNota {
-  final String nome;
-  final double quantidade;
-  final String unidade;
-  final String categoria;
-  final String emoji;
+  String nome;
+  double quantidade;
+  String unidade;
+  String categoria;
+  String emoji;
+
+  /// Preço unitário lido da nota. `null` quando não apareceu.
+  double? preco;
 
   /// Marcado pelo usuário na tela de revisão antes de importar.
   bool selecionado;
@@ -22,6 +27,7 @@ class ProdutoNota {
     required this.unidade,
     required this.categoria,
     required this.emoji,
+    this.preco,
     this.selecionado = true,
   });
 }
@@ -49,14 +55,17 @@ descontos, totais e produtos que não sejam comida ou limpeza.
 
 Responda SOMENTE com um array JSON, sem markdown e sem texto em volta:
 [
-  {"nome": "Arroz Tipo 1", "quantidade": 5.0, "unidade": "kg", "categoria": "Grãos"},
-  {"nome": "Leite Integral", "quantidade": 1.0, "unidade": "L", "categoria": "Laticínios"}
+  {"nome": "Arroz Tipo 1", "quantidade": 5.0, "unidade": "kg", "categoria": "Grãos", "preco_unitario": 24.90},
+  {"nome": "Leite Integral", "quantidade": 1.0, "unidade": "L", "categoria": "Laticínios", "preco_unitario": 4.49}
 ]
 
 Regras:
 - "nome": nome limpo e legível do produto, sem códigos e sem abreviações do cupom.
 - "categoria": exatamente uma de Hortifruti, Carnes, Laticínios, Grãos, Bebidas, Limpeza.
 - "unidade": exatamente uma de kg, g, ml, L, un, cx.
+- "preco_unitario": preço de UMA unidade em reais, como número (24.90, não "R\$ 24,90").
+  Se a nota mostrar só o total da linha, divida pelo total de unidades.
+  Se não conseguir identificar o preço, use null.
 - Se não identificar a quantidade, use 1.0 e unidade "un".
 - Se não houver nenhum produto válido, responda [].
 ''';
@@ -293,6 +302,7 @@ Regras:
         unidade: unidade,
         categoria: categoria,
         emoji: AppConstants.emojisDaCategoria(categoria).first,
+        preco: _lerPreco(bruto['preco_unitario']),
       ));
     }
     return produtos;
@@ -305,6 +315,24 @@ Regras:
     final fim = t.lastIndexOf(']');
     if (ini >= 0 && fim > ini) t = t.substring(ini, fim + 1);
     return t;
+  }
+
+  /// Aceita número ou texto ("R$ 24,90"); descarta zero e negativo, que
+  /// significam "não consegui ler", não "de graça".
+  static double? _lerPreco(Object? bruto) {
+    if (bruto == null) return null;
+    double? v;
+    if (bruto is num) {
+      v = bruto.toDouble();
+    } else {
+      final limpo = bruto
+          .toString()
+          .replaceAll(RegExp(r'[^0-9,.]'), '')
+          .replaceAll(',', '.');
+      v = double.tryParse(limpo);
+    }
+    if (v == null || v <= 0) return null;
+    return v;
   }
 
   static String _validar(String? valor, List<String> validos, String padrao) {

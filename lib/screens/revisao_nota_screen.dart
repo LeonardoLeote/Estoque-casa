@@ -5,6 +5,7 @@ import '../main.dart';
 import '../models/item_model.dart';
 import '../services/gemini_service.dart';
 import '../services/supabase_service.dart';
+import '../widgets/editor_produto_nota.dart';
 
 /// Revisão do que o Gemini leu na nota antes de gravar no estoque.
 ///
@@ -22,6 +23,23 @@ class _RevisaoNotaScreenState extends State<RevisaoNotaScreen> {
 
   int get _selecionados => widget.produtos.where((p) => p.selecionado).length;
 
+  Future<void> _editar(ProdutoNota produto) async {
+    final mudou = await EditorProdutoNota.abrir(context, produto);
+    if (mudou && mounted) {
+      // O editor altera o produto no lugar; só falta redesenhar a lista.
+      setState(() => produto.selecionado = true);
+    }
+  }
+
+  /// Soma preço × quantidade do que está marcado. Ignora os sem preço —
+  /// por isso é "parcial" e não um total da nota.
+  double get _totalSelecionado => widget.produtos
+      .where((p) => p.selecionado && p.preco != null)
+      .fold(0.0, (soma, p) => soma + p.preco! * p.quantidade);
+
+  bool get _algumSemPreco =>
+      widget.produtos.any((p) => p.selecionado && p.preco == null);
+
   Future<void> _importar() async {
     final escolhidos = widget.produtos.where((p) => p.selecionado).toList();
     if (escolhidos.isEmpty) return;
@@ -29,17 +47,20 @@ class _RevisaoNotaScreenState extends State<RevisaoNotaScreen> {
     setState(() => _importando = true);
     final agora = DateTime.now();
     final itens = escolhidos
-        .map((p) => ItemModel(
-              id: '',
-              nome: p.nome,
-              categoria: p.categoria,
-              quantidade: p.quantidade,
-              unidade: p.unidade,
-              minimo: 0,
-              emoji: p.emoji,
-              createdAt: agora,
-              updatedAt: agora,
-            ))
+        .map(
+          (p) => ItemModel(
+            id: '',
+            nome: p.nome,
+            categoria: p.categoria,
+            quantidade: p.quantidade,
+            unidade: p.unidade,
+            minimo: 0,
+            emoji: p.emoji,
+            preco: p.preco,
+            createdAt: agora,
+            updatedAt: agora,
+          ),
+        )
         .toList();
 
     try {
@@ -101,9 +122,9 @@ class _RevisaoNotaScreenState extends State<RevisaoNotaScreen> {
               borderRadius: BorderRadius.circular(14),
             ),
             child: Text(
-              'Confira antes de importar — a leitura automática pode errar '
-              'nomes e quantidades. Todos entram com alerta mínimo 0; ajuste '
-              'depois pela tela do item.',
+              'Toque em um produto para corrigir nome, quantidade, categoria '
+              'ou preço antes de importar — a leitura automática erra. Todos '
+              'entram com alerta mínimo 0; ajuste depois pela tela do item.',
               style: TextStyle(
                 fontSize: 12.5,
                 height: 1.4,
@@ -116,30 +137,41 @@ class _RevisaoNotaScreenState extends State<RevisaoNotaScreen> {
             Container(
               margin: const EdgeInsets.only(bottom: 8),
               decoration: BoxDecoration(
-                color: Colors.white,
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
               ),
-              child: CheckboxListTile(
-                value: p.selecionado,
-                onChanged: _importando
-                    ? null
-                    : (v) => setState(() => p.selecionado = v ?? false),
-                activeColor: const Color(AppConstants.corVerde),
-                controlAffinity: ListTileControlAffinity.leading,
-                title: Text(
-                  p.nome,
-                  style: const TextStyle(
-                    fontSize: 14.5,
-                    fontWeight: FontWeight.w800,
+              clipBehavior: Clip.antiAlias,
+              // O ListTile pinta fundo e ondulação no Material mais próximo:
+              // sem este, a cor do Container esconderia o toque.
+              child: Material(
+                color: Colors.white,
+                child: CheckboxListTile(
+                  value: p.selecionado,
+                  onChanged: _importando
+                      ? null
+                      : (v) => setState(() => p.selecionado = v ?? false),
+                  activeColor: const Color(AppConstants.corVerde),
+                  controlAffinity: ListTileControlAffinity.leading,
+                  title: Text(
+                    p.nome,
+                    style: const TextStyle(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
-                ),
-                subtitle: Text(
-                  '${p.emoji} ${p.categoria} · '
-                  '${ItemModel.formatarNumero(p.quantidade)} ${p.unidade}',
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    color: Colors.black.withValues(alpha: 0.55),
+                  subtitle: Text(
+                    '${p.emoji} ${p.categoria} · '
+                    '${ItemModel.formatarNumero(p.quantidade)} ${p.unidade}'
+                    '${p.preco == null ? "" : " · ${ItemModel.formatarDinheiro(p.preco!)}"}',
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: Colors.black.withValues(alpha: 0.55),
+                    ),
+                  ),
+                  secondary: IconButton(
+                    tooltip: 'Corrigir',
+                    onPressed: _importando ? null : () => _editar(p),
+                    icon: const Icon(Icons.edit_outlined, size: 20),
                   ),
                 ),
               ),
@@ -148,38 +180,68 @@ class _RevisaoNotaScreenState extends State<RevisaoNotaScreen> {
       ),
       bottomNavigationBar: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: SizedBox(
-            height: 52,
-            child: FilledButton(
-              onPressed:
-                  (_importando || _selecionados == 0) ? null : _importar,
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(AppConstants.corVerde),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_totalSelecionado > 0)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        _algumSemPreco ? 'Total (itens com preço)' : 'Total',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.black.withValues(alpha: 0.55),
+                        ),
+                      ),
+                      Text(
+                        ItemModel.formatarDinheiro(_totalSelecionado),
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              SizedBox(
+                height: 52,
+                child: FilledButton(
+                  onPressed: (_importando || _selecionados == 0)
+                      ? null
+                      : _importar,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(AppConstants.corVerde),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  child: _importando
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.4,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Text(
+                          _selecionados == 0
+                              ? 'Selecione ao menos um item'
+                              : 'Importar $_selecionados '
+                                    '${_selecionados == 1 ? "item" : "itens"}',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
                 ),
               ),
-              child: _importando
-                  ? const SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.4,
-                        color: Colors.white,
-                      ),
-                    )
-                  : Text(
-                      _selecionados == 0
-                          ? 'Selecione ao menos um item'
-                          : 'Importar $_selecionados '
-                              '${_selecionados == 1 ? "item" : "itens"}',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-            ),
+            ],
           ),
         ),
       ),

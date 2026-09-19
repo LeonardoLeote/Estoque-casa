@@ -11,6 +11,10 @@ class ItemModel {
   final String unidade;
   final double minimo;
   final String emoji;
+
+  /// Preço unitário em reais. `null` quando ninguém informou — diferente
+  /// de zero, que significaria "de graça".
+  final double? preco;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -22,6 +26,7 @@ class ItemModel {
     required this.unidade,
     required this.minimo,
     required this.emoji,
+    this.preco,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -30,6 +35,12 @@ class ItemModel {
     if (v is num) return v.toDouble();
     if (v is String) return double.tryParse(v) ?? 0;
     return 0;
+  }
+
+  static double? _toDoubleOrNull(Object? v) {
+    if (v == null) return null;
+    if (v is num) return v.toDouble();
+    return double.tryParse(v.toString());
   }
 
   static DateTime _toDate(Object? v) =>
@@ -43,6 +54,7 @@ class ItemModel {
         unidade: (json['unidade'] ?? 'un') as String,
         minimo: _toDouble(json['minimo']),
         emoji: (json['emoji'] ?? '📦') as String,
+        preco: _toDoubleOrNull(json['preco']),
         createdAt: _toDate(json['created_at']),
         updatedAt: _toDate(json['updated_at']),
       );
@@ -55,6 +67,7 @@ class ItemModel {
         'unidade': unidade,
         'minimo': minimo,
         'emoji': emoji,
+        'preco': preco,
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       };
 
@@ -67,6 +80,7 @@ class ItemModel {
         'unidade': unidade,
         'minimo': minimo,
         'emoji': emoji,
+        'preco': preco,
         'created_at': createdAt.toIso8601String(),
         'updated_at': updatedAt.toIso8601String(),
       };
@@ -78,6 +92,8 @@ class ItemModel {
     String? unidade,
     double? minimo,
     String? emoji,
+    double? preco,
+    bool limparPreco = false,
   }) =>
       ItemModel(
         id: id,
@@ -87,6 +103,9 @@ class ItemModel {
         unidade: unidade ?? this.unidade,
         minimo: minimo ?? this.minimo,
         emoji: emoji ?? this.emoji,
+        // `preco: null` é ambíguo (manter ou apagar?), então apagar é
+        // explícito via limparPreco.
+        preco: limparPreco ? null : (preco ?? this.preco),
         createdAt: createdAt,
         updatedAt: DateTime.now(),
       );
@@ -125,4 +144,14 @@ class ItemModel {
     if (v == v.roundToDouble()) return v.round().toString();
     return v.toStringAsFixed(2).replaceAll('.', ',');
   }
+
+  /// "R$ 12,90", ou null quando não há preço.
+  String? get precoFormatado =>
+      preco == null ? null : 'R\$ ${preco!.toStringAsFixed(2).replaceAll('.', ',')}';
+
+  /// Quanto vale o que está em casa deste item.
+  double? get valorEmEstoque => preco == null ? null : preco! * quantidade;
+
+  static String formatarDinheiro(double v) =>
+      'R\$ ${v.toStringAsFixed(2).replaceAll('.', ',')}';
 }

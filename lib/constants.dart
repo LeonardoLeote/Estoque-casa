@@ -33,6 +33,9 @@ class AppConstants {
 
   static bool get geminiConfigurado => geminiApiKey.isNotEmpty;
 
+  /// Commit que gerou este APK, injetado pelo CI. Vazio num build local.
+  static const buildCommit = String.fromEnvironment('APP_BUILD_COMMIT');
+
   /// Categorias reais dos itens (sem o pseudo-filtro "Todos").
   static const categorias = [
     'Hortifruti',

@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS items (
   unidade     TEXT NOT NULL DEFAULT 'un',
   minimo      NUMERIC(10,2) NOT NULL DEFAULT 0,
   emoji       TEXT NOT NULL DEFAULT '📦',
+  -- Preço unitário em reais. NULL = não informado (≠ 0, que seria grátis).
+  preco       NUMERIC(10,2),
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -28,6 +30,9 @@ CREATE TABLE IF NOT EXISTS historico (
   usuario             TEXT NOT NULL,
   created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Para bancos criados antes da migração 001.
+ALTER TABLE items ADD COLUMN IF NOT EXISTS preco NUMERIC(10,2);
 
 CREATE INDEX IF NOT EXISTS historico_created_at_idx
   ON historico (created_at DESC);

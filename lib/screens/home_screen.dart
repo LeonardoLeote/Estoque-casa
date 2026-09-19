@@ -11,7 +11,6 @@ import '../services/gemini_service.dart';
 import '../services/local_cache.dart';
 import '../services/notification_service.dart';
 import '../services/supabase_service.dart';
-import '../services/user_service.dart';
 import '../widgets/category_filter.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/item_card.dart';
@@ -20,6 +19,7 @@ import 'add_edit_screen.dart';
 import 'historico_screen.dart';
 import 'lista_compras_screen.dart';
 import 'revisao_nota_screen.dart';
+import 'sobre_screen.dart';
 
 enum FiltroStatus { todos, baixo, vazio }
 
@@ -298,7 +298,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // ── Menu ────────────────────────────────────────────────────────────
 
-  Future<void> _abrirMenu(String opcao) async {
+  void _abrirMenu(String opcao) {
     switch (opcao) {
       case 'historico':
         Navigator.push(
@@ -313,25 +313,9 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         );
       case 'sobre':
-        final atualizado = await LocalCache.atualizadoEm();
-        if (!mounted) return;
-        showAboutDialog(
-          context: context,
-          applicationName: 'Estoque Casa',
-          applicationVersion: '1.0.0',
-          applicationIcon: const Text('🏠', style: TextStyle(fontSize: 36)),
-          children: [
-            const SizedBox(height: 8),
-            Text('Usuário deste aparelho: ${UserService.nome}'),
-            if (atualizado != null)
-              Text(
-                'Dados sincronizados em '
-                '${atualizado.day.toString().padLeft(2, '0')}/'
-                '${atualizado.month.toString().padLeft(2, '0')} '
-                '${atualizado.hour.toString().padLeft(2, '0')}:'
-                '${atualizado.minute.toString().padLeft(2, '0')}',
-              ),
-          ],
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => SobreScreen(itens: _itens)),
         );
     }
   }

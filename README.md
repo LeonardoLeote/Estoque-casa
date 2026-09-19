@@ -12,7 +12,12 @@ Flutter + Supabase (com realtime) + leitura de nota fiscal pelo Gemini.
 - Histórico das últimas 100 alterações, assinado com o nome de quem mexeu.
 - Lista de compras gerada sozinha, agrupada por categoria e compartilhável no WhatsApp.
 - Notificação local quando algo entra em nível baixo ou acaba.
-- Leitura de nota fiscal por foto, com tela de revisão antes de importar.
+- Preço unitário por item, lido da nota fiscal ou digitado à mão.
+- Leitura de nota fiscal por foto, com tela de revisão onde dá para corrigir
+  nome, quantidade, categoria, ícone e preço antes de importar.
+- Estimativa de gasto na lista de compras, com base nos preços conhecidos.
+- Tela "Sobre" com a versão instalada, o commit que gerou o APK e o valor
+  total do estoque.
 - Abre e mostra o estoque mesmo sem internet (leitura do cache local).
 
 ## Configuração
@@ -20,6 +25,10 @@ Flutter + Supabase (com realtime) + leitura de nota fiscal pelo Gemini.
 ### 1. Banco de dados
 
 No dashboard do Supabase → **SQL Editor**, rode [`supabase/schema.sql`](supabase/schema.sql).
+
+**Já tinha o banco criado antes da coluna de preço?** Rode
+[`supabase/migracao_001_preco.sql`](supabase/migracao_001_preco.sql) **antes**
+de instalar o APK novo — sem a coluna `preco`, salvar item passa a dar erro.
 Leia [`SEGURANCA.md`](SEGURANCA.md) antes: as políticas padrão deixam o banco
 aberto para quem tiver a chave.
 
@@ -110,3 +119,6 @@ lib/
   estoque sem você confirmar.
 - **Itens importados entram com alerta mínimo 0**, ou seja, sem aviso de estoque
   baixo até você definir um.
+- **O preço é o último informado**, não um histórico. Reimportar uma nota com
+  preço novo sobrescreve o antigo, e a estimativa da lista de compras assume
+  que o preço de hoje é o de amanhã.
