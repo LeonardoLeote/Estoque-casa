@@ -82,10 +82,16 @@ jobs:
               echo "::error::Não consegui abrir o keystore. Confira ANDROID_KEYSTORE_PASSWORD e se o alias é 'estoquecasa'."
               exit 1
             fi
-            echo "Keystore validado. Impressão digital:"
-            keytool -list -keystore android/estoque-casa.jks \
-              -storepass "$KEYSTORE_PASSWORD" -alias estoquecasa \
-              | grep -i "SHA-256" || true
+            DIGITAL=$(keytool -list -keystore android/estoque-casa.jks \
+              -storepass "$KEYSTORE_PASSWORD" -alias estoquecasa 2>/dev/null \
+              | grep -oiE "([0-9A-F]{2}:){31}[0-9A-F]{2}" | head -1 \
+              | tr -d ':' | tr "A-F" "a-f")
+            if [ -z "$DIGITAL" ]; then
+              echo "::error::Não consegui extrair a impressão digital do keystore."
+              exit 1
+            fi
+            echo "Keystore validado. Impressão digital: $DIGITAL"
+            echo "digital=$DIGITAL" >> "$GITHUB_OUTPUT"
             echo "assinado=proprio" >> "$GITHUB_OUTPUT"
           else
             echo "::warning::Sem ANDROID_KEYSTORE_BASE64: o APK sai com chave de debug e NÃO instala por cima da versão anterior."
@@ -96,13 +102,43 @@ jobs:
         if: steps.cfg.outputs.configurado == 'true'
         run: flutter build apk --release --dart-define-from-file=env.json
 
+      # Compara a assinatura REAL do APK com a do keystore. A versão
+      # anterior deste passo só imprimia texto e passava mesmo quando o
+      # apksigner falhava: o código de saída do pipeline era o do `head`.
       - name: Conferir assinatura do APK
         if: steps.cfg.outputs.configurado == 'true' && steps.chave.outputs.assinado == 'proprio'
+        env:
+          ESPERADA: ${{ steps.chave.outputs.digital }}
         run: |
+          set -o pipefail
           APK=build/app/outputs/flutter-apk/app-release.apk
-          "$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs "$APK" \
-            | grep -i "SHA-256" | head -2
-          echo "Se esta impressão digital mudar entre builds, a atualização falha."
+
+          # O glob casava com várias versões de build-tools e virava
+          # "apksigner apksigner verify ...". Escolhe a mais recente.
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner 2>/dev/null \
+            | sort -V | tail -1)
+          if [ -z "$APKSIGNER" ]; then
+            echo "::error::apksigner não encontrado em $ANDROID_HOME/build-tools."
+            exit 1
+          fi
+          echo "Usando $APKSIGNER"
+
+          SAIDA=$("$APKSIGNER" verify --print-certs "$APK")
+          OBTIDA=$(printf '%s' "$SAIDA" \
+            | grep -i "SHA-256 digest" | head -1 \
+            | grep -oiE "[0-9a-f]{64}" | tr "A-F" "a-f")
+
+          echo "esperada: $ESPERADA"
+          echo "no APK  : $OBTIDA"
+          if [ -z "$OBTIDA" ]; then
+            echo "::error::Não consegui ler a assinatura do APK."
+            exit 1
+          fi
+          if [ "$OBTIDA" != "$ESPERADA" ]; then
+            echo "::error::O APK foi assinado com outra chave. A atualização vai falhar."
+            exit 1
+          fi
+          echo "✓ APK assinado com a chave esperada."
 
       - name: Remover chave de assinatura
         if: always()
