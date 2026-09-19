@@ -24,10 +24,12 @@ jobs:
 
       - run: flutter pub get
 
+      # Os testes usam chaves de exemplo e um http.Client falso: nada sai
+      # para a rede, mas as constantes precisam estar definidas.
       - name: Análise e testes
         run: |
           flutter analyze
-          flutter test
+          flutter test --dart-define-from-file=env.example.json
 
       # As chaves vêm dos Secrets do repositório, nunca do código-fonte.
       # Configure em: Settings → Secrets and variables → Actions.

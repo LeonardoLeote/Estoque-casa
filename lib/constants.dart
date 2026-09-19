@@ -16,6 +16,18 @@ class AppConstants {
     defaultValue: 'gemini-flash-latest',
   );
 
+  /// Modelo reserva, usado quando o principal responde "sobrecarregado".
+  /// Costuma estar em outra fila de capacidade do Google.
+  static const geminiModelFallback = String.fromEnvironment(
+    'GEMINI_MODEL_FALLBACK',
+    defaultValue: 'gemini-flash-lite-latest',
+  );
+
+  /// Ordem de tentativa, sem repetir se os dois forem iguais.
+  static List<String> get modelosGemini => geminiModel == geminiModelFallback
+      ? [geminiModel]
+      : [geminiModel, geminiModelFallback];
+
   static bool get supabaseConfigurado =>
       supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty;
 

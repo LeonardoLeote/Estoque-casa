@@ -61,21 +61,82 @@ Regras:
 - Se não houver nenhum produto válido, responda [].
 ''';
 
-  static Future<List<ProdutoNota>> lerNotaFiscal(File imagem) async {
+  /// Quantas vezes insistir no mesmo modelo antes de trocar.
+  static const _tentativasPorModelo = 3;
+
+  /// Respostas que valem uma nova tentativa: sobrecarga e limite de uso são
+  /// passageiros, e falhar de primeira obrigaria o usuário a refotografar.
+  static bool ehTransitorio(int status) =>
+      status == 429 || status == 500 || status == 502 || status == 503 ||
+      status == 504;
+
+  static Future<List<ProdutoNota>> lerNotaFiscal(
+    File imagem, {
+    http.Client? client,
+  }) async {
+    final bytes = await imagem.readAsBytes();
+    return analisarImagem(
+      bytes,
+      _mimeType(imagem.path),
+      client: client,
+    );
+  }
+
+  /// Separado de [lerNotaFiscal] para poder ser testado sem tocar no disco.
+  static Future<List<ProdutoNota>> analisarImagem(
+    List<int> bytes,
+    String mimeType, {
+    http.Client? client,
+  }) async {
     if (!AppConstants.geminiConfigurado) {
       throw GeminiException(
         'Leitura de nota indisponível: GEMINI_API_KEY não foi configurada no build.',
       );
     }
 
-    final bytes = await imagem.readAsBytes();
-    final uri = Uri.parse(
-      '$_endpointBase/${AppConstants.geminiModel}:generateContent',
-    );
+    final cliente = client ?? http.Client();
+    final nossoCliente = client == null;
+    try {
+      GeminiException? ultimoErro;
+
+      // Se o modelo principal estiver sobrecarregado, o reserva costuma
+      // estar em outra fila de capacidade.
+      for (final modelo in AppConstants.modelosGemini) {
+        for (var tentativa = 1; tentativa <= _tentativasPorModelo; tentativa++) {
+          final resultado = await _tentar(cliente, modelo, bytes, mimeType);
+
+          if (resultado.produtos != null) return resultado.produtos!;
+
+          ultimoErro = resultado.erro;
+          if (!resultado.podeTentarDeNovo) break; // erro definitivo: troca de modelo
+
+          if (tentativa < _tentativasPorModelo) {
+            await Future<void>.delayed(
+              Duration(milliseconds: 1500 * tentativa),
+            );
+          }
+        }
+      }
+
+      throw ultimoErro ??
+          GeminiException('Não consegui falar com o Gemini agora.');
+    } finally {
+      // Só fechamos o que criamos: um client injetado é do chamador.
+      if (nossoCliente) cliente.close();
+    }
+  }
+
+  static Future<_Tentativa> _tentar(
+    http.Client client,
+    String modelo,
+    List<int> bytes,
+    String mimeType,
+  ) async {
+    final uri = Uri.parse('$_endpointBase/$modelo:generateContent');
 
     late final http.Response resposta;
     try {
-      resposta = await http
+      resposta = await client
           .post(
             uri,
             headers: {
@@ -89,7 +150,7 @@ Regras:
                     {'text': _prompt},
                     {
                       'inline_data': {
-                        'mime_type': _mimeType(imagem.path),
+                        'mime_type': mimeType,
                         'data': base64Encode(bytes),
                       }
                     },
@@ -101,20 +162,37 @@ Regras:
           )
           .timeout(const Duration(seconds: 90));
     } on SocketException {
-      throw GeminiException('Sem internet para ler a nota fiscal.');
+      return _Tentativa.falha(
+        GeminiException('Sem internet para ler a nota fiscal.'),
+        podeTentarDeNovo: false,
+      );
     } catch (_) {
-      throw GeminiException('A leitura da nota demorou demais. Tente de novo.');
+      return _Tentativa.falha(
+        GeminiException('A leitura da nota demorou demais. Tente de novo.'),
+        podeTentarDeNovo: true,
+      );
     }
 
     if (resposta.statusCode != 200) {
-      throw GeminiException(_erroDaApi(resposta));
+      return _Tentativa.falha(
+        GeminiException(_erroDaApi(resposta)),
+        podeTentarDeNovo: ehTransitorio(resposta.statusCode),
+      );
     }
 
     final texto = _extrairTexto(resposta.body);
     if (texto == null) {
-      throw GeminiException('O Gemini não retornou nada legível.');
+      return _Tentativa.falha(
+        GeminiException('O Gemini não retornou nada legível.'),
+        podeTentarDeNovo: false,
+      );
     }
-    return _parsearProdutos(texto);
+
+    try {
+      return _Tentativa.ok(_parsearProdutos(texto));
+    } on GeminiException catch (e) {
+      return _Tentativa.falha(e, podeTentarDeNovo: false);
+    }
   }
 
   static String _mimeType(String caminho) {
@@ -125,20 +203,27 @@ Regras:
     return 'image/jpeg';
   }
 
+  /// Mensagens em português: o texto cru do Google é em inglês e não diz ao
+  /// usuário o que fazer.
   static String _erroDaApi(http.Response r) {
+    switch (r.statusCode) {
+      case 503:
+      case 500:
+      case 502:
+      case 504:
+        return 'O Gemini está sobrecarregado agora. Tente de novo em alguns minutos.';
+      case 429:
+        return 'Limite de uso do Gemini atingido. Tente mais tarde.';
+      case 404:
+        return 'Nenhum modelo do Gemini disponível para esta chave.';
+      case 400:
+      case 403:
+        return 'A chave do Gemini foi recusada. Confira GEMINI_API_KEY no build.';
+    }
     try {
       final corpo = jsonDecode(r.body) as Map<String, dynamic>;
       final msg = (corpo['error'] as Map?)?['message']?.toString();
-      if (msg != null && msg.isNotEmpty) {
-        if (r.statusCode == 404) {
-          return 'Modelo "${AppConstants.geminiModel}" indisponível. '
-              'Troque GEMINI_MODEL no build.';
-        }
-        if (r.statusCode == 429) {
-          return 'Limite de uso do Gemini atingido. Tente mais tarde.';
-        }
-        return 'Gemini: $msg';
-      }
+      if (msg != null && msg.isNotEmpty) return 'Gemini: $msg';
     } catch (_) {
       // Corpo não-JSON: cai na mensagem genérica abaixo.
     }
@@ -229,4 +314,18 @@ Regras:
     }
     return padrao;
   }
+}
+
+/// Resultado de uma chamada: os produtos, ou o erro e se vale insistir.
+class _Tentativa {
+  final List<ProdutoNota>? produtos;
+  final GeminiException? erro;
+  final bool podeTentarDeNovo;
+
+  _Tentativa.ok(List<ProdutoNota> this.produtos)
+      : erro = null,
+        podeTentarDeNovo = false;
+
+  _Tentativa.falha(GeminiException this.erro, {required this.podeTentarDeNovo})
+      : produtos = null;
 }
