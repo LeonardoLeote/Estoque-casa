@@ -12,6 +12,9 @@ Flutter + Supabase (com realtime) + leitura de nota fiscal pelo Gemini.
 - Histórico das últimas 100 alterações, assinado com o nome de quem mexeu.
 - Lista de compras gerada sozinha, agrupada por categoria e compartilhável no WhatsApp.
 - Notificação local quando algo entra em nível baixo ou acaba.
+- Categorias e ícones editáveis pelo próprio app, compartilhados pela casa:
+  10 categorias prontas (incluindo Besteiras, Padaria, Higiene) e mais de
+  150 ícones, com catálogo para montar as suas.
 - Preço unitário por item, lido da nota fiscal ou digitado à mão.
 - Leitura de nota fiscal por foto, com tela de revisão onde dá para corrigir
   nome, quantidade, categoria, ícone e preço antes de importar.
@@ -26,9 +29,13 @@ Flutter + Supabase (com realtime) + leitura de nota fiscal pelo Gemini.
 
 No dashboard do Supabase → **SQL Editor**, rode [`supabase/schema.sql`](supabase/schema.sql).
 
-**Já tinha o banco criado antes da coluna de preço?** Rode
-[`supabase/migracao_001_preco.sql`](supabase/migracao_001_preco.sql) **antes**
-de instalar o APK novo — sem a coluna `preco`, salvar item passa a dar erro.
+**Banco já existente?** Rode as migrações pendentes **antes** de instalar o
+APK novo:
+
+| Migração | O que faz | Se não rodar |
+|---|---|---|
+| [`001_preco`](supabase/migracao_001_preco.sql) | coluna `preco` | salvar item dá erro |
+| [`002_categorias`](supabase/migracao_002_categorias.sql) | tabela `categorias` | o app usa as categorias embutidas e o menu Categorias não salva |
 Leia [`SEGURANCA.md`](SEGURANCA.md) antes: as políticas padrão deixam o banco
 aberto para quem tiver a chave.
 
@@ -63,9 +70,36 @@ O workflow [`build-apk.yml`](.github/workflows/build-apk.yml) roda a cada push:
 analisa, testa e compila. Baixe o APK em **Actions → o run → Artifacts →
 `estoque-casa-apk`**.
 
+### Assinatura
+
+O APK precisa ser sempre assinado com **a mesma chave**, senão o Android
+recusa instalar por cima da versão anterior e exige desinstalar antes.
+
+Cadastre nos Secrets do repositório:
+
+| Secret | Conteúdo |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | o arquivo `.jks` em base64 |
+| `ANDROID_KEYSTORE_PASSWORD` | a senha do keystore |
+
+Sem eles o build usa a chave de debug, que é gerada de novo a cada máquina —
+o APK sai, mas não atualiza por cima.
+
+> **Guarde o `.jks` e a senha.** Perder a chave significa nunca mais conseguir
+> atualizar o app instalado: só desinstalando e perdendo o histórico local.
+
 ### Localmente
 
 Precisa de Flutter 3.47.5+ e do Android SDK instalados.
+
+Para assinar igual ao CI, crie `android/key.properties` (já no `.gitignore`):
+
+```properties
+storeFile=/caminho/para/estoque-casa.jks
+storePassword=sua-senha
+keyAlias=estoquecasa
+keyPassword=sua-senha
+```
 
 ```bash
 flutter pub get
@@ -74,9 +108,8 @@ flutter build apk --release --dart-define-from-file=env.json
 
 Saída em `build/app/outputs/flutter-apk/app-release.apk`.
 
-> O APK sai assinado com a **chave de debug** — instala normalmente via
-> "fontes desconhecidas", mas não serve para a Play Store. Para publicar, crie
-> uma signing config própria em `android/app/build.gradle.kts`.
+> Sem `android/key.properties`, o build cai na chave de debug e o APK não
+> instala por cima de uma versão assinada com outra chave.
 
 ## Modelo do Gemini
 
@@ -90,6 +123,12 @@ aponta sempre para o flash estável atual. Para fixar outro, defina
 flutter test
 flutter analyze
 ```
+
+## Ícone do app
+
+Gerado por código em [`design/gerar_icone.py`](design/gerar_icone.py) (Pillow),
+com a arte de referência em `design/icone-1024.png`. Para mudar, edite o script
+e regrave os mipmaps.
 
 ## Estrutura
 

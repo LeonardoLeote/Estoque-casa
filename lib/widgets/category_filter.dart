@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../constants.dart';
+import '../services/categoria_service.dart';
 
 /// Barra horizontal de categorias.
 class CategoryFilter extends StatelessWidget {
@@ -12,6 +13,9 @@ class CategoryFilter extends StatelessWidget {
     required this.onSelecionar,
   });
 
+  /// "Todos" na frente das categorias cadastradas.
+  List<String> get _categorias => ['Todos', ...CategoriaService.nomes];
+
   @override
   Widget build(BuildContext context) {
     return SizedBox(
@@ -19,10 +23,10 @@ class CategoryFilter extends StatelessWidget {
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: AppConstants.categoriasFiltro.length,
+        itemCount: _categorias.length,
         separatorBuilder: (_, _) => const SizedBox(width: 8),
         itemBuilder: (context, i) {
-          final cat = AppConstants.categoriasFiltro[i];
+          final cat = _categorias[i];
           final ativo = cat == selecionada;
           return ChoiceChip(
             label: Text(cat),

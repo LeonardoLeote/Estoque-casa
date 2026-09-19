@@ -55,9 +55,43 @@ jobs:
             echo "configurado=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # Sem uma chave estável, cada run assina com uma chave de debug nova e
+      # o Android recusa instalar por cima da versão anterior.
+      - name: Preparar chave de assinatura
+        id: chave
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$KEYSTORE_PASSWORD" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > android/estoque-casa.jks
+            cat > android/key.properties <<EOF
+          storeFile=estoque-casa.jks
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=estoquecasa
+          keyPassword=$KEYSTORE_PASSWORD
+          EOF
+            echo "assinado=proprio" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Sem ANDROID_KEYSTORE_BASE64: o APK sai com chave de debug e NÃO instala por cima da versão anterior."
+            echo "assinado=debug" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build APK release
         if: steps.cfg.outputs.configurado == 'true'
         run: flutter build apk --release --dart-define-from-file=env.json
+
+      - name: Conferir assinatura do APK
+        if: steps.cfg.outputs.configurado == 'true' && steps.chave.outputs.assinado == 'proprio'
+        run: |
+          APK=build/app/outputs/flutter-apk/app-release.apk
+          "$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs "$APK" \
+            | grep -i "SHA-256" | head -2
+          echo "Se esta impressão digital mudar entre builds, a atualização falha."
+
+      - name: Remover chave de assinatura
+        if: always()
+        run: rm -f android/estoque-casa.jks android/key.properties
 
       # Sem secrets não dá para gerar um APK que funcione, mas ainda vale
       # provar que o lado Android (Gradle, desugaring, plugins) compila.

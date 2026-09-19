@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../constants.dart';
 import '../models/item_model.dart';
+import '../services/categoria_service.dart';
 import '../services/gemini_service.dart';
 
 /// Folha para corrigir um produto lido da nota antes de importar.
@@ -78,7 +79,7 @@ class _EditorProdutoNotaState extends State<EditorProdutoNota> {
 
   @override
   Widget build(BuildContext context) {
-    final emojis = AppConstants.emojisDaCategoria(_categoria);
+    final emojis = CategoriaService.emojisDe(_categoria);
 
     return Padding(
       padding: EdgeInsets.only(
@@ -153,7 +154,7 @@ class _EditorProdutoNotaState extends State<EditorProdutoNota> {
               spacing: 8,
               runSpacing: 8,
               children: [
-                for (final cat in AppConstants.categorias)
+                for (final cat in CategoriaService.nomes)
                   ChoiceChip(
                     label: Text(cat),
                     selected: _categoria == cat,
@@ -166,7 +167,7 @@ class _EditorProdutoNotaState extends State<EditorProdutoNota> {
                     ),
                     onSelected: (_) => setState(() {
                       _categoria = cat;
-                      final novos = AppConstants.emojisDaCategoria(cat);
+                      final novos = CategoriaService.emojisDe(cat);
                       if (!novos.contains(_emoji)) _emoji = novos.first;
                     }),
                   ),

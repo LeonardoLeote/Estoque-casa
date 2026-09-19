@@ -6,6 +6,7 @@ import 'constants.dart';
 import 'screens/config_ausente_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/setup_screen.dart';
+import 'services/categoria_service.dart';
 import 'services/notification_service.dart';
 import 'services/user_service.dart';
 
@@ -30,6 +31,8 @@ Future<void> main() async {
 
   await NotificationService.init();
   await UserService.carregar();
+  // Falha aqui não impede o app de abrir: cai nas categorias embutidas.
+  await CategoriaService.carregar();
   final configurado = await UserService.configurado();
 
   runApp(EstoqueCasaApp(

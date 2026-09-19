@@ -16,6 +16,7 @@ import '../widgets/empty_state.dart';
 import '../widgets/item_card.dart';
 import '../widgets/stat_card.dart';
 import 'add_edit_screen.dart';
+import 'categorias_screen.dart';
 import 'historico_screen.dart';
 import 'lista_compras_screen.dart';
 import 'revisao_nota_screen.dart';
@@ -312,6 +313,14 @@ class _HomeScreenState extends State<HomeScreen> {
             builder: (_) => ListaComprasScreen(itens: _itens),
           ),
         );
+      case 'categorias':
+        // Mexer em categorias muda os filtros e pode renomear itens.
+        Navigator.push<bool>(
+          context,
+          MaterialPageRoute(builder: (_) => const CategoriasScreen()),
+        ).then((mudou) {
+          if (mudou == true && mounted) _carregar();
+        });
       case 'sobre':
         Navigator.push(
           context,
@@ -341,6 +350,7 @@ class _HomeScreenState extends State<HomeScreen> {
             itemBuilder: (_) => const [
               PopupMenuItem(value: 'compras', child: Text('🛒 Lista de compras')),
               PopupMenuItem(value: 'historico', child: Text('🕓 Histórico')),
+              PopupMenuItem(value: 'categorias', child: Text('🏷️ Categorias')),
               PopupMenuItem(value: 'sobre', child: Text('ℹ️ Sobre')),
             ],
           ),

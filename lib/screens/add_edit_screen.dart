@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../constants.dart';
 import '../main.dart';
 import '../models/item_model.dart';
+import '../services/categoria_service.dart';
 import '../services/supabase_service.dart';
 
 /// Adiciona um item novo ou edita um existente.
@@ -46,9 +47,9 @@ class _AddEditScreenState extends State<AddEditScreen> {
           ? ''
           : item!.preco!.toStringAsFixed(2).replaceAll('.', ','),
     );
-    _categoria = item?.categoria ?? AppConstants.categorias.first;
+    _categoria = item?.categoria ?? CategoriaService.nomes.first;
     _unidade = item?.unidade ?? 'un';
-    _emoji = item?.emoji ?? AppConstants.emojisDaCategoria(_categoria).first;
+    _emoji = item?.emoji ?? CategoriaService.emojisDe(_categoria).first;
   }
 
   @override
@@ -154,7 +155,7 @@ class _AddEditScreenState extends State<AddEditScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final emojis = AppConstants.emojisDaCategoria(_categoria);
+    final emojis = CategoriaService.emojisDe(_categoria);
 
     return Scaffold(
       appBar: AppBar(
@@ -196,7 +197,7 @@ class _AddEditScreenState extends State<AddEditScreen> {
               spacing: 8,
               runSpacing: 8,
               children: [
-                for (final cat in AppConstants.categorias)
+                for (final cat in CategoriaService.nomes)
                   ChoiceChip(
                     label: Text(cat),
                     selected: _categoria == cat,
@@ -214,7 +215,7 @@ class _AddEditScreenState extends State<AddEditScreen> {
                               // O emoji atual pode não existir na nova
                               // categoria: cai para o primeiro dela.
                               final novos =
-                                  AppConstants.emojisDaCategoria(cat);
+                                  CategoriaService.emojisDe(cat);
                               if (!novos.contains(_emoji)) _emoji = novos.first;
                             }),
                   ),

@@ -3,6 +3,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import '../constants.dart';
 import '../models/item_model.dart';
+import '../services/categoria_service.dart';
 import '../services/local_cache.dart';
 import '../services/user_service.dart';
 
@@ -102,6 +103,7 @@ class _SobreScreenState extends State<SobreScreen> {
 
           _Secao('Estoque', [
             _Linha('Itens cadastrados', '${widget.itens.length}'),
+            _Linha('Categorias', '${CategoriaService.categorias.length}'),
             _Linha(
               'Valor em casa',
               valorTotal > 0
